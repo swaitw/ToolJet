@@ -1,10 +1,31 @@
 import React from 'react';
-import { CodeHinter } from '../../CodeBuilder/CodeHinter';
-import { ToolTip } from './Components/ToolTip';
+import _ from 'lodash';
+import { useCurrentState } from '@/_stores/currentStateStore';
+import CodeEditor from '@/Editor/CodeEditor';
+import { getDefinitionInitialValue } from './utils';
 
-export const Code = ({ param, definition, onChange, paramType, componentMeta, currentState, darkMode }) => {
-  const initialValue = definition ? definition.value : '';
-  const paramMeta = componentMeta[paramType][param.name];
+const CLIENT_SERVER_TOGGLE_FIELDS = ['serverSidePagination', 'serverSideSort', 'serverSideFilter'];
+
+export const Code = ({
+  param,
+  definition,
+  onChange,
+  paramType,
+  componentMeta,
+  componentName,
+  onFxPress,
+  fxActive,
+  component,
+  accordian,
+  placeholder,
+}) => {
+  const currentState = useCurrentState();
+
+  let initialValue = !_.isEmpty(definition)
+    ? definition.value
+    : getDefinitionInitialValue(paramType, param.name, component, currentState, definition.value);
+
+  const paramMeta = accordian ? componentMeta[paramType]?.[param.name] : componentMeta[paramType][param.name];
   const displayName = paramMeta.displayName || param.name;
 
   function handleCodeChanged(value) {
@@ -13,18 +34,34 @@ export const Code = ({ param, definition, onChange, paramType, componentMeta, cu
 
   const options = paramMeta.options || {};
 
+  const getfieldName = React.useMemo(() => {
+    return param.name;
+  }, [param]);
+
+  function onVisibilityChange(value) {
+    onChange({ name: 'iconVisibility' }, 'value', value, 'styles');
+  }
+
   return (
-    <div className={`mb-2 field ${options.className}`}>
-      <ToolTip label={displayName} meta={paramMeta} />
-      <CodeHinter
-        enablePreview={true}
-        currentState={currentState}
+    <div className={`field ${options.className}`} style={{ marginBottom: '8px' }}>
+      <CodeEditor
+        type="fxEditor"
         initialValue={initialValue}
-        mode={options.mode}
-        theme={darkMode ? 'monokai' : options.theme}
-        lineWrapping={true}
-        className={options.className}
+        paramName={param.name}
+        paramLabel={paramMeta?.showLabel !== false ? displayName : ' '}
+        paramType={paramMeta.type}
+        fieldMeta={paramMeta}
+        onFxPress={onFxPress}
+        fxActive={CLIENT_SERVER_TOGGLE_FIELDS.includes(param.name) ? false : fxActive} // Client Server Toggle don't support Fx
+        componentName={`component/${componentName}::${getfieldName}`}
         onChange={(value) => handleCodeChanged(value)}
+        className={options?.className}
+        componentId={component?.id}
+        styleDefinition={component?.component?.definition?.styles ?? {}}
+        component={component?.component?.component}
+        onVisibilityChange={onVisibilityChange}
+        placeholder={placeholder}
+        cyLabel=""
       />
     </div>
   );
