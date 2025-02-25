@@ -1,15 +1,17 @@
 import React from 'react';
 import cx from 'classnames';
-import { useSpring, animated } from 'react-spring';
 
 import { useDrag } from 'react-dnd';
-import { ItemTypes } from '@/Editor/ItemTypes';
+import { ItemTypes } from '@/Editor/editorConstants';
 import CommentHeader from '@/Editor/Comment/CommentHeader';
 import CommentBody from '@/Editor/Comment/CommentBody';
 import CommentFooter from '@/Editor/Comment/CommentFooter';
 import usePopover from '@/_hooks/use-popover';
-import { commentsService } from '@/_services';
+import { commentsService, organizationService, authenticationService } from '@/_services';
 import useRouter from '@/_hooks/use-router';
+import DOMPurify from 'dompurify';
+import { capitalize } from 'lodash';
+import { getPathname } from '@/_helpers/routes';
 
 const Comment = ({
   socket,
@@ -21,12 +23,13 @@ const Comment = ({
   fetchThreads,
   appVersionsId,
   canvasWidth,
-  users,
+  appId,
 }) => {
   const [loading, setLoading] = React.useState(true);
   const [editComment, setEditComment] = React.useState('');
   const [editCommentId, setEditCommentId] = React.useState('');
   const [thread, setThread] = React.useState([]);
+  const [mentionedUsers, setMentionedUsers] = React.useState([]);
   const [placement, setPlacement] = React.useState('left');
   const [open, trigger, content, setOpen] = usePopover(false);
   const [, drag] = useDrag(() => ({
@@ -34,16 +37,23 @@ const Comment = ({
     item: { threadId, name: 'comment' },
   }));
   const router = useRouter();
+  const [currentUser, setCurrentUser] = React.useState();
 
   React.useEffect(() => {
     // Listen for messages
     // TODO: add check if user is the initiator of this event, don't fetch data
+    const currentSession = authenticationService.currentSessionValue;
+    const currentUser = currentSession?.current_user;
+    setCurrentUser(currentUser);
+
     socket?.addEventListener('message', function (event) {
       if (event.data === threadId) fetchData();
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useLayoutEffect(() => {
+    // eslint-disable-next-line no-unsafe-optional-chaining
     const { left } = trigger?.ref?.current?.getBoundingClientRect();
 
     if (left < 460) setPlacement('right');
@@ -61,64 +71,78 @@ const Comment = ({
       fetchData();
     } else {
       // resetting the query param
-      router.push(window.location.pathname);
+      // react router updates the url with the set basename resulting invalid url unless replaced
+      router.history(getPathname());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   React.useEffect(() => {
     if (router.query.threadId === threadId) {
       setOpen(true);
-    } else {
-      setOpen(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const handleSubmit = async (comment) => {
     await commentsService.createComment({
       threadId,
-      comment,
+      comment: DOMPurify.sanitize(comment),
       appVersionsId,
+      mentionedUsers,
     });
     socket.send(
       JSON.stringify({
         event: 'events',
-        data: { message: threadId, appId: router.query.id },
+        data: { message: threadId, appId },
       })
     );
     socket.send(
       JSON.stringify({
         event: 'events',
-        data: { message: 'notifications', appId: router.query.id },
+        data: { message: 'notifications', appId },
       })
     );
     fetchData();
   };
 
   const handleEdit = async (comment, cid) => {
-    await commentsService.updateComment(cid, { comment });
+    await commentsService.updateComment(cid, { comment: DOMPurify.sanitize(comment) });
     fetchData();
     socket.send(
       JSON.stringify({
         event: 'events',
-        data: { message: 'notifications', appId: router.query.id },
+        data: { message: 'notifications', appId },
       })
     );
   };
 
-  const commentFadeStyle = useSpring({ from: { opacity: 0 }, to: { opacity: 1 } });
-  const popoverFadeStyle = useSpring({ opacity: open ? 1 : 0 });
-
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+  const searchUser = (query, callback) => {
+    if (!query) {
+      return;
+    }
+    organizationService
+      .getUsersByValue(query)
+      .then((data) =>
+        data.users.map((u) => ({
+          id: u.user_id,
+          display: `${capitalize(u.first_name ?? '')} ${capitalize(u.last_name ?? '')}`,
+          email: u.email,
+          first_name: u.first_name,
+          last_name: u.last_name,
+        }))
+      )
+      .then(callback);
+  };
 
   return (
     <>
-      <animated.div
+      <div
         ref={drag}
         id={`thread-${threadId}`}
-        className={cx('comments cursor-move', { open: open })}
+        className={cx('comments cursor-move', { open })}
         style={{
           transform: `translate(${(x * canvasWidth) / 100}px, ${y}px)`,
-          ...commentFadeStyle,
         }}
         onDragStart={() => setOpen(false)}
         onDragEnd={() => setOpen(true)}
@@ -130,12 +154,11 @@ const Comment = ({
               'comment-open': open,
             })}
           >
-            {`${user.firstName?.charAt(0)}${user.lastName?.charAt(0)}`}
+            {`${user?.firstName?.charAt(0) ?? ''}${user?.lastName?.charAt(0) ?? ''}`}
           </span>
         </label>
-        <animated.div
+        <div
           {...content}
-          style={popoverFadeStyle}
           className={cx('card popover comment-popover', {
             'open-left': placement === 'left',
             'open-right': placement === 'right',
@@ -155,8 +178,9 @@ const Comment = ({
             socket={socket}
             threadId={threadId}
             fetchThreads={fetchThreads}
-            isThreadOwner={currentUser.id === user.id}
+            isThreadOwner={currentUser?.id === user.id}
             isResolved={isResolved}
+            appId={appId}
           />
           <CommentBody
             socket={socket}
@@ -165,15 +189,18 @@ const Comment = ({
             fetchComments={fetchData}
             isLoading={loading}
             thread={thread}
+            currentUser={currentUser}
           />
           <CommentFooter
-            users={users}
+            searchUser={searchUser}
+            setMentionedUsers={setMentionedUsers}
             editComment={editComment}
             editCommentId={editCommentId}
+            setEditCommentId={setEditCommentId}
             handleSubmit={editCommentId ? handleEdit : handleSubmit}
           />
-        </animated.div>
-      </animated.div>
+        </div>
+      </div>
       {open && <div className="comment-overlay" onClick={(e) => e.stopPropagation()} />}
     </>
   );

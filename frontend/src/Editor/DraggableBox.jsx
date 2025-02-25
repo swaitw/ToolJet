@@ -1,45 +1,21 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import cx from 'classnames';
 import { useDrag } from 'react-dnd';
-import { ItemTypes } from './ItemTypes';
+import { ItemTypes } from './editorConstants';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 import { Box } from './Box';
 import { ConfigHandle } from './ConfigHandle';
-import { Rnd } from 'react-rnd';
-
-const resizerClasses = {
-  topRight: 'top-right',
-  bottomRight: 'bottom-right',
-  bottomLeft: 'bottom-left',
-  topLeft: 'top-left',
-};
-
-const resizerStyles = {
-  topRight: {
-    width: '12px',
-    height: '12px',
-    right: '-6px',
-    top: '-6px',
-  },
-  bottomRight: {
-    width: '12px',
-    height: '12px',
-    right: '-6px',
-    bottom: '-6px',
-  },
-  bottomLeft: {
-    width: '12px',
-    height: '12px',
-    left: '-6px',
-    bottom: '-6px',
-  },
-  topLeft: {
-    width: '12px',
-    height: '12px',
-    left: '-6px',
-    top: '-6px',
-  },
-};
+import { resolveWidgetFieldValue } from '@/_helpers/utils';
+import ErrorBoundary from './ErrorBoundary';
+import { useEditorStore } from '@/_stores/editorStore';
+import { shallow } from 'zustand/shallow';
+import { useNoOfGrid, useGridStore } from '@/_stores/gridStore';
+import WidgetBox from './WidgetBox';
+import * as Sentry from '@sentry/react';
+import { findHighestLevelofSelection } from './DragContainer';
+import { useCurrentStateStore } from '@/_stores/currentStateStore';
+import { useResolveStore } from '@/_stores/resolverStore';
 
 function computeWidth(currentLayoutOptions) {
   return `${currentLayoutOptions?.width}%`;
@@ -55,212 +31,230 @@ function getStyles(isDragging, isSelectedComponent) {
   };
 }
 
-export const DraggableBox = function DraggableBox({
-  id,
-  mode,
-  title,
-  left,
-  top,
-  parent,
-  component,
-  index,
-  inCanvas,
-  onEvent,
-  onComponentClick,
-  currentState,
-  onComponentOptionChanged,
-  onComponentOptionsChanged,
-  onResizeStop,
-  onDragStop,
-  paramUpdated,
-  resizingStatusChanged,
-  zoomLevel,
-  containerProps,
-  configHandleClicked,
-  removeComponent,
-  currentLayout,
-  layouts,
-  deviceWindowWidth,
-  isSelectedComponent,
-  draggingStatusChanged,
-  darkMode,
-  canvasWidth,
-}) {
-  const [isResizing, setResizing] = useState(false);
-  const [isDragging2, setDragging] = useState(false);
-  const [canDrag, setCanDrag] = useState(true);
-  const [mouseOver, setMouseOver] = useState(false);
-
-  const [{ isDragging }, drag, preview] = useDrag(
-    () => ({
-      type: ItemTypes.BOX,
-      item: {
-        id,
-        title,
-        component,
-        zoomLevel,
-        parent,
-        layouts,
-        canvasWidth,
-        currentLayout,
-      },
-      collect: (monitor) => ({
-        isDragging: monitor.isDragging(),
+const DraggableBox = React.memo(
+  ({
+    id,
+    className,
+    mode,
+    title,
+    parent,
+    component,
+    index,
+    inCanvas,
+    onEvent,
+    onComponentClick,
+    paramUpdated,
+    zoomLevel,
+    removeComponent,
+    layouts,
+    darkMode,
+    canvasWidth,
+    readOnly,
+    customResolvables,
+    parentId,
+    getContainerProps,
+    currentPageId,
+    onComponentOptionChanged = null,
+    onComponentOptionsChanged = null,
+    isFromSubContainer = false,
+    childComponents = null,
+  }) => {
+    const isResizing = useGridStore((state) => state.resizingComponentId === id);
+    const [canDrag, setCanDrag] = useState(true);
+    const noOfGrid = useNoOfGrid();
+    const {
+      currentLayout,
+      setHoveredComponent,
+      selectionInProgress,
+      isSelectedComponent,
+      isMultipleComponentsSelected,
+      autoComputeLayout,
+    } = useEditorStore(
+      (state) => ({
+        currentLayout: state?.currentLayout,
+        setHoveredComponent: state?.actions?.setHoveredComponent,
+        selectionInProgress: state?.selectionInProgress,
+        isSelectedComponent:
+          mode === 'edit' ? state?.selectedComponents?.some((component) => component?.id === id) : false,
+        isMultipleComponentsSelected: findHighestLevelofSelection(state?.selectedComponents)?.length > 1 ? true : false,
+        autoComputeLayout: state?.appDefinition?.pages?.[state?.currentPageId]?.autoComputeLayout,
       }),
-    }),
-    [id, title, component, index, zoomLevel, parent, layouts, currentLayout, canvasWidth]
-  );
+      shallow
+    );
 
-  useEffect(() => {
-    preview(getEmptyImage(), { captureDraggingState: true });
-  }, [isDragging]);
+    const [{ isDragging }, drag, preview] = useDrag(
+      () => ({
+        type: ItemTypes.BOX,
+        item: {
+          id,
+          title,
+          component,
+          zoomLevel,
+          parent,
+          layouts,
+          canvasWidth,
+          currentLayout,
+          autoComputeLayout,
+        },
+        collect: (monitor) => ({
+          isDragging: monitor.isDragging(),
+        }),
+      }),
+      [id, title, component, index, currentLayout, zoomLevel, parent, layouts, canvasWidth, autoComputeLayout]
+    );
 
-  useEffect(() => {
-    if (resizingStatusChanged) {
-      resizingStatusChanged(isResizing);
+    useEffect(() => {
+      preview(getEmptyImage(), { captureDraggingState: true });
+    }, [isDragging]);
+
+    let _refProps = {};
+
+    if (mode === 'edit' && canDrag) {
+      _refProps = {
+        ref: drag,
+      };
     }
-  }, [isResizing]);
 
-  useEffect(() => {
-    if (draggingStatusChanged) {
-      draggingStatusChanged(isDragging2);
-    }
-  }, [isDragging2]);
+    const changeCanDrag = useCallback(
+      (newState) => {
+        setCanDrag(newState);
+      },
+      [setCanDrag]
+    );
 
-  const style = {
-    display: 'inline-block',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '0px',
-  };
-
-  let refProps = {};
-
-  if (mode === 'edit' && canDrag) {
-    refProps = {
-      ref: drag,
+    const defaultData = {
+      top: 100,
+      left: 0,
+      width: 43,
+      height: 500,
     };
-  }
 
-  function changeCanDrag(newState) {
-    setCanDrag(newState);
-  }
+    const layoutData = inCanvas ? layouts[currentLayout] || layouts['desktop'] : defaultData;
+    const width = (canvasWidth * layoutData.width) / noOfGrid;
 
-  const defaultData = {
-    top: 100,
-    left: 0,
-    width: 445,
-    height: 500,
-  };
+    const configWidgetHandlerForModalComponent =
+      !isSelectedComponent &&
+      component.component === 'Modal' &&
+      resolveWidgetFieldValue(component.definition.properties.useDefaultButton?.value) === false;
 
-  const layoutData = inCanvas ? layouts[currentLayout] || defaultData : defaultData;
-  const [currentLayoutOptions, setCurrentLayoutOptions] = useState(layoutData);
+    const onComponentHover = useCallback(
+      (id) => {
+        if (selectionInProgress) return;
+        setHoveredComponent(id);
+      },
+      [id]
+    );
 
-  useEffect(() => {
-    console.log(layoutData);
-    setCurrentLayoutOptions(layoutData);
-  }, [layoutData.height, layoutData.width, layoutData.left, layoutData.top, currentLayout]);
+    const isEditorReady = useCurrentStateStore.getState().isEditorReady;
+    const isResolverStoreReady = useResolveStore.getState().storeReady;
 
-  const gridWidth = canvasWidth / 43;
-  const width = (canvasWidth * currentLayoutOptions.width) / 43
+    const isCanvasReady = isEditorReady && isResolverStoreReady;
+    /**
+     * !This component does not consume the value returned from the below hook.
+     * Only purpose of the hook is to force one rerender the component
+     * */
+    useEditorStore((state) => state.componentsNeedsUpdateOnNextRender.find((compId) => compId === id));
 
-  return (
-    <div
-      className={inCanvas ? '' : 'col-md-4 text-center align-items-center clearfix mb-2'}
-      style={!inCanvas ? {} : { width: computeWidth() }}
-    >
-      {inCanvas ? (
-        <div
-          className="draggable-box "
-          onMouseOver={() => setMouseOver(true)}
-          onMouseLeave={() => setMouseOver(false)}
-          style={getStyles(isDragging, isSelectedComponent)}
-        >
-          <Rnd
-            style={{ ...style }}
-            resizeGrid={[gridWidth, 10]}
-            dragGrid={[gridWidth, 10]}
-            size={{
-              width: width,
-              height: currentLayoutOptions.height,
+    return (
+      <div
+        className={
+          inCanvas
+            ? 'widget-in-canvas'
+            : cx('text-center align-items-center clearfix draggable-box-wrapper', {
+                '': component.component !== 'KanbanBoard',
+                'd-none': component.component === 'KanbanBoard',
+              })
+        }
+        style={!inCanvas ? {} : { width: computeWidth() }}
+      >
+        {inCanvas ? (
+          <div
+            className={cx(`draggable-box w-100 widget-${id}`, {
+              [className]: !!className,
+              'draggable-box-in-editor': mode === 'edit',
+            })}
+            onMouseEnter={(e) => {
+              if (useGridStore.getState().draggingComponentId) return;
+              const closestDraggableBox = e.target.closest('.draggable-box');
+              if (closestDraggableBox) {
+                const classNames = closestDraggableBox.className.split(' ');
+                let compId = null;
+
+                classNames.forEach((className) => {
+                  if (className.startsWith('widget-')) {
+                    compId = className.replace('widget-', '');
+                  }
+                });
+
+                onComponentHover?.(compId);
+                e.stopPropagation();
+              }
             }}
-            position={{
-              x: currentLayoutOptions ? (currentLayoutOptions.left * canvasWidth) / 100 : 0,
-              y: currentLayoutOptions ? currentLayoutOptions.top : 0,
+            onMouseLeave={() => {
+              if (useGridStore.getState().draggingComponentId) return;
+              setHoveredComponent('');
             }}
-            defaultSize={{}}
-            className={`resizer ${mouseOver || isResizing || isSelectedComponent ? 'resizer-active' : ''} `}
-            onResize={() => setResizing(true)}
-            onDrag={(e) => {
-              e.preventDefault();
-              e.stopImmediatePropagation();
-              setDragging(true)
-            }}
-            resizeHandleClasses={isSelectedComponent || mouseOver ? resizerClasses : {}}
-            resizeHandleStyles={resizerStyles}
-            disableDragging={mode !== 'edit'}
-            onDragStop={(e, direction) => {
-              setDragging(false)
-              onDragStop(e, id, direction, currentLayout, currentLayoutOptions)
-            }}
-            cancel={`div.table-responsive.jet-data-table, div.calendar-widget`}
-            onDragStart={(e) => e.stopPropagation()}
-            enableResizing={mode === 'edit'}
-            onResizeStop={(e, direction, ref, d, position) => {
-              setResizing(false);
-              onResizeStop(id, e, direction, ref, d, position);
-            }}
-            bounds={parent !== undefined ? `#canvas-${parent}` : '.real-canvas'}
+            style={getStyles(isDragging, isSelectedComponent)}
           >
             <div ref={preview} role="DraggableBox" style={isResizing ? { opacity: 0.5 } : { opacity: 1 }}>
-              {mode === 'edit' && mouseOver && !isResizing && (
+              {mode === 'edit' && !readOnly && (
                 <ConfigHandle
                   id={id}
                   removeComponent={removeComponent}
                   component={component}
-                  configHandleClicked={(id, component) => configHandleClicked(id, component)}
+                  position={layoutData.top < 15 ? 'bottom' : 'top'}
+                  widgetTop={layoutData.top}
+                  widgetHeight={layoutData.height}
+                  isMultipleComponentsSelected={isMultipleComponentsSelected}
+                  configWidgetHandlerForModalComponent={configWidgetHandlerForModalComponent}
+                  isSelectedComponent={isSelectedComponent}
+                  showHandle={configWidgetHandlerForModalComponent || isSelectedComponent}
                 />
               )}
-              <Box
-                component={component}
-                id={id}
-                width={width}
-                height={currentLayoutOptions.height - 4}
-                mode={mode}
-                changeCanDrag={changeCanDrag}
-                inCanvas={inCanvas}
-                paramUpdated={paramUpdated}
-                onEvent={onEvent}
-                onComponentOptionChanged={onComponentOptionChanged}
-                onComponentOptionsChanged={onComponentOptionsChanged}
-                onComponentClick={onComponentClick}
-                currentState={currentState}
-                containerProps={containerProps}
-                darkMode={darkMode}
-                removeComponent={removeComponent}
-                canvasWidth={canvasWidth}
-              />
+              <Sentry.ErrorBoundary
+                fallback={<h2>Something went wrong.</h2>}
+                beforeCapture={(scope) => {
+                  scope.setTag('errorType', 'component');
+                }}
+              >
+                <Box
+                  component={component}
+                  id={id}
+                  width={width}
+                  height={layoutData.height - 4}
+                  mode={mode}
+                  changeCanDrag={changeCanDrag}
+                  inCanvas={inCanvas}
+                  paramUpdated={paramUpdated}
+                  onEvent={onEvent}
+                  onComponentClick={onComponentClick}
+                  darkMode={darkMode}
+                  removeComponent={removeComponent}
+                  canvasWidth={canvasWidth}
+                  readOnly={readOnly}
+                  customResolvables={customResolvables}
+                  parentId={parentId}
+                  getContainerProps={getContainerProps}
+                  currentPageId={currentPageId}
+                  onOptionChanged={onComponentOptionChanged}
+                  onOptionsChanged={onComponentOptionsChanged}
+                  isFromSubContainer={isFromSubContainer}
+                  childComponents={childComponents}
+                  isCanvasReady={isCanvasReady}
+                />
+              </Sentry.ErrorBoundary>
             </div>
-          </Rnd>
-        </div>
-      ) : (
-        <div ref={drag} role="DraggableBox" className="draggable-box" style={{ height: '100%' }}>
-          <Box
-            component={component}
-            id={id}
-            mode={mode}
-            inCanvas={inCanvas}
-            onEvent={onEvent}
-            paramUpdated={paramUpdated}
-            onComponentOptionChanged={onComponentOptionChanged}
-            onComponentOptionsChanged={onComponentOptionsChanged}
-            onComponentClick={onComponentClick}
-            currentState={currentState}
-            darkMode={darkMode}
-            removeComponent={removeComponent}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
+          </div>
+        ) : (
+          <div ref={drag} role="DraggableBox" className="draggable-box" style={{ height: '100%' }}>
+            <ErrorBoundary showFallback={mode === 'edit'}>
+              <WidgetBox component={component} darkMode={darkMode} />
+            </ErrorBoundary>
+          </div>
+        )}
+      </div>
+    );
+  }
+);
+
+export { DraggableBox };
