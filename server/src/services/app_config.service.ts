@@ -22,7 +22,12 @@ export class AppConfigService {
       'APM_VENDOR',
       'SENTRY_DNS',
       'SENTRY_DEBUG',
-      'SSO_GOOGLE_OAUTH2_CLIENT_ID',
+      'TOOLJET_HOST',
+      'SUB_PATH',
+      'ENABLE_MARKETPLACE_FEATURE',
+      'ENABLE_TOOLJET_DB',
+      'LANGUAGE',
+      'ENABLE_PRIVATE_APP_EMBED',
     ];
   }
 

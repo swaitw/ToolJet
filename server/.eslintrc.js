@@ -1,4 +1,5 @@
 module.exports = {
+  root: true,
   env: {
     node: true,
     jest: true,
@@ -9,10 +10,13 @@ module.exports = {
     'plugin:prettier/recommended',
     'plugin:cypress/recommended',
   ],
+  ignorePatterns: ['.eslintrc.js'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 12,
     sourceType: 'module',
+    project: ['./tsconfig.json'],
+    "warnOnUnsupportedTypeScriptVersion": false
   },
   overrides: [
     {
@@ -41,6 +45,7 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['error', { vars: 'all', args: 'none' }],
     '@typescript-eslint/no-var-requires': 'off',
     '@typescript-eslint/no-empty-function': 0,
+    'no-unsafe-optional-chaining': 'off',
     '@typescript-eslint/ban-types': [
       'error',
       {

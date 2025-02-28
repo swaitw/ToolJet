@@ -13,27 +13,60 @@ import { OrganizationsService } from 'src/services/organizations.service';
 import { OrganizationUsersService } from 'src/services/organization_users.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '@services/email.service';
-import { OauthService, GoogleOAuthService } from '@ee/services/oauth';
+import { OauthService, GoogleOAuthService, GitOAuthService } from '@ee/services/oauth';
 import { OauthController } from '@ee/controllers/oauth.controller';
 import { GroupPermission } from 'src/entities/group_permission.entity';
 import { App } from 'src/entities/app.entity';
+import { File } from 'src/entities/file.entity';
+import { FilesService } from '@services/files.service';
+import { SSOConfigs } from 'src/entities/sso_config.entity';
+import { GroupPermissionsService } from '@services/group_permissions.service';
+import { AppGroupPermission } from 'src/entities/app_group_permission.entity';
+import { UserGroupPermission } from 'src/entities/user_group_permission.entity';
+import { EncryptionService } from '@services/encryption.service';
+import { DataSourcesService } from '@services/data_sources.service';
+import { CredentialsService } from '@services/credentials.service';
+import { DataSource } from 'src/entities/data_source.entity';
+import { Credential } from 'src/entities/credential.entity';
+import { Plugin } from 'src/entities/plugin.entity';
+import { PluginsHelper } from 'src/helpers/plugins.helper';
+import { AppEnvironmentService } from '@services/app_environments.service';
+import { MetaModule } from '../meta/meta.module';
+import { Metadata } from 'src/entities/metadata.entity';
+import { MetadataService } from '@services/metadata.service';
+import { SessionService } from '@services/session.service';
+import { SessionScheduler } from 'src/schedulers/session.scheduler';
+import { TooljetDbModule } from '../tooljet_db/tooljet_db.module';
 
 @Module({
   imports: [
     UsersModule,
     PassportModule,
-    TypeOrmModule.forFeature([User, Organization, OrganizationUser, GroupPermission, App]),
+    TypeOrmModule.forFeature([
+      User,
+      File,
+      Organization,
+      OrganizationUser,
+      GroupPermission,
+      App,
+      SSOConfigs,
+      AppGroupPermission,
+      UserGroupPermission,
+      DataSource,
+      Credential,
+      Plugin,
+      Metadata,
+    ]),
+    MetaModule,
     JwtModule.registerAsync({
       useFactory: (config: ConfigService) => {
         return {
           secret: config.get<string>('SECRET_KEY_BASE'),
-          signOptions: {
-            expiresIn: config.get<string | number>('JWT_EXPIRATION_TIME') || '30d',
-          },
         };
       },
       inject: [ConfigService],
     }),
+    TooljetDbModule,
   ],
   providers: [
     AuthService,
@@ -44,8 +77,19 @@ import { App } from 'src/entities/app.entity';
     EmailService,
     OauthService,
     GoogleOAuthService,
+    GitOAuthService,
+    FilesService,
+    GroupPermissionsService,
+    EncryptionService,
+    DataSourcesService,
+    CredentialsService,
+    AppEnvironmentService,
+    MetadataService,
+    PluginsHelper,
+    SessionService,
+    SessionScheduler,
   ],
   controllers: [OauthController],
-  exports: [AuthService],
+  exports: [AuthService, SessionService],
 })
 export class AuthModule {}
