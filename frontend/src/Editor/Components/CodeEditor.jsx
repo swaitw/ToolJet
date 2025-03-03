@@ -1,86 +1,83 @@
-import React, { useEffect, useState } from 'react';
-import { resolveWidgetFieldValue } from '@/_helpers/utils';
+/* eslint-disable import/no-unresolved */
+import React from 'react';
 import CodeMirror from '@uiw/react-codemirror';
-import 'codemirror/addon/comment/comment';
-import 'codemirror/addon/hint/show-hint';
-import 'codemirror/addon/display/placeholder';
-import 'codemirror/addon/search/match-highlighter';
-import 'codemirror/addon/hint/show-hint.css';
-import 'codemirror/theme/base16-light.css';
-import 'codemirror/theme/duotone-light.css';
-import 'codemirror/theme/monokai.css';
-import { onBeforeChange, handleChange } from '../CodeBuilder/utils';
+import { okaidia } from '@uiw/codemirror-theme-okaidia';
+import { githubLight } from '@uiw/codemirror-theme-github';
+import { javascript } from '@codemirror/lang-javascript';
+import { python } from '@codemirror/lang-python';
+import { sql } from '@codemirror/lang-sql';
+import { sass } from '@codemirror/lang-sass';
+import { debounce } from 'lodash';
 
-export const CodeEditor = ({ width, height, component, currentState, onComponentOptionChanged, darkMode }) => {
-  const enableLineNumber = component.definition.properties?.enableLineNumber?.value ?? true;
-  const languageMode = component.definition.properties.mode.value;
-  const placeholder = component.definition.properties.placeholder.value;
+const langSupport = Object.freeze({
+  javascript: javascript(),
+  python: python(),
+  sql: sql(),
+  jsx: javascript({ jsx: true }),
+  css: sass(),
+});
 
-  const widgetVisibility = component.definition.styles?.visibility?.value ?? true;
-  const disabledState = component.definition.styles?.disabledState?.value ?? false;
+export const CodeEditor = ({ height, darkMode, properties, styles, exposedVariables, setExposedVariable, dataCy }) => {
+  const { enableLineNumber, mode, placeholder } = properties;
+  const { visibility, disabledState } = styles;
 
-  const parsedDisabledState =
-    typeof disabledState !== 'boolean' ? resolveWidgetFieldValue(disabledState, currentState) : disabledState;
-  const parsedWidgetVisibility =
-    typeof widgetVisibility !== 'boolean' ? resolveWidgetFieldValue(widgetVisibility, currentState) : widgetVisibility;
+  const codeChanged = debounce((code) => {
+    setExposedVariable('value', code);
+  }, 500);
 
-  const parsedEnableLineNumber =
-    typeof enableLineNumber !== 'boolean' ? resolveWidgetFieldValue(enableLineNumber, currentState) : enableLineNumber;
-
-  const value = currentState?.components[component?.name]?.value;
-
-  const [editorValue, setEditorValue] = useState(value);
-  const [realState, setRealState] = useState(currentState);
-
-  function codeChanged(code) {
-    setEditorValue(code);
-    onComponentOptionChanged(component, 'value', code);
-  }
-
-  const styles = {
+  const editorStyles = {
     height: height,
-    display: !parsedWidgetVisibility ? 'none' : 'block',
-  };
-  const options = {
-    lineNumbers: parsedEnableLineNumber,
-    lineWrapping: true,
-    singleLine: true,
-    mode: languageMode,
-    tabSize: 2,
-    theme: darkMode ? 'monokai' : 'duotone-light',
-    readOnly: false,
-    highlightSelectionMatches: true,
-    placeholder,
+    display: !visibility ? 'none' : 'block',
   };
 
-  function valueChanged(editor, onChange, ignoreBraces = false) {
-    handleChange(editor, onChange, [], ignoreBraces);
-    setEditorValue(editor.getValue());
-  }
+  const setupConfig = {
+    lineNumbers: enableLineNumber ?? true,
+    syntaxHighlighting: true,
+    bracketMatching: true,
+    foldGutter: true,
+    highlightActiveLine: false,
+    autocompletion: true,
+    highlightActiveLineGutter: false,
+    completionKeymap: true,
+    searchKeymap: false,
+  };
 
-  useEffect(() => {
-    setRealState(currentState);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentState.components]);
+  const theme = darkMode ? okaidia : githubLight;
+  const langExtention = langSupport[mode?.toLowerCase()] ?? null;
+
+  const editorHeight = React.useMemo(() => {
+    return height || 'auto';
+  }, [height]);
 
   return (
-    <div data-disabled={parsedDisabledState} style={styles}>
+    <div data-disabled={disabledState} style={editorStyles} data-cy={dataCy}>
       <div
         className={`code-hinter codehinter-default-input code-editor-widget`}
-        style={{ height: height || 'auto', minHeight: height - 1, maxHeight: '320px', overflow: 'auto' }}
+        style={{
+          height: height || 'auto',
+          minHeight: height - 1,
+          // maxHeight: '320px',
+          overflow: 'auto',
+          borderRadius: `${styles.borderRadius}px`,
+          boxShadow: styles.boxShadow,
+        }}
       >
         <CodeMirror
-          value={editorValue}
-          realState={realState}
-          scrollbarStyle={null}
-          height={height - 1}
-          onBlur={(editor) => {
-            const value = editor.getValue();
-            codeChanged(value);
+          value={exposedVariables.value}
+          placeholder={placeholder}
+          height={'100%'}
+          minHeight={editorHeight}
+          maxHeight="100%"
+          width="100%"
+          theme={theme}
+          extensions={[langExtention]}
+          onChange={codeChanged}
+          basicSetup={setupConfig}
+          style={{
+            overflowY: 'auto',
           }}
-          onChange={(editor) => valueChanged(editor, codeChanged)}
-          onBeforeChange={(editor, change) => onBeforeChange(editor, change)}
-          options={options}
+          className={`codehinter-multi-line-input`}
+          indentWithTab={true}
         />
       </div>
     </div>
