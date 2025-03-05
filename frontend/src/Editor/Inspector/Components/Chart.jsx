@@ -1,7 +1,9 @@
 import React from 'react';
 import { renderElement } from '../Utils';
-import { CodeHinter } from '../../CodeBuilder/CodeHinter';
+import { EventManager } from '@/Editor/Inspector/EventManager';
 import Accordion from '@/_ui/Accordion';
+import { resolveWidgetFieldValue } from '@/_helpers/utils';
+import CodeHinter from '@/Editor/CodeEditor';
 
 class Chart extends React.Component {
   constructor(props) {
@@ -55,11 +57,27 @@ class Chart extends React.Component {
   }
 
   render() {
-    const { dataQueries, component, paramUpdated, componentMeta, components, currentState } = this.state;
+    const {
+      dataQueries,
+      component,
+      paramUpdated,
+      componentMeta,
+      components,
+      currentState,
+      allComponents,
+      apps,
+      eventsChanged,
+      darkMode,
+      pages,
+    } = this.props;
+    const data = this.props.component.component.definition.properties.data; // since component is not unmounting on every render in current scenario
 
-    const data = this.state.component.component.definition.properties.data;
+    const jsonDescription = this.props.component.component.definition.properties.jsonDescription;
 
-    const chartType = this.state.component.component.definition.properties.type.value;
+    const plotFromJson = resolveWidgetFieldValue(
+      this.props.component.component.definition.properties.plotFromJson?.value
+    );
+    const chartType = this.props.component.component.definition.properties.type.value;
 
     let items = [];
 
@@ -73,83 +91,145 @@ class Chart extends React.Component {
         'title',
         'properties',
         currentState,
-        components
+        components,
+        this.props.darkMode
       ),
     });
 
     items.push({
-      title: 'Properties',
+      title: 'Plotly JSON chart schema',
       children: renderElement(
         component,
         componentMeta,
         paramUpdated,
         dataQueries,
-        'type',
-        'properties',
-        currentState,
-        components
-      ),
-    });
-
-    items.push({
-      title: 'Chart data',
-      children: (
-        <CodeHinter
-          currentState={this.props.currentState}
-          initialValue={data.value}
-          theme={this.props.darkMode ? 'monokai' : 'duotone-light'}
-          mode="javascript"
-          lineNumbers={false}
-          className="chart-input pr-2"
-          onChange={(value) => this.props.paramUpdated({ name: 'data' }, 'value', value, 'properties')}
-        />
-      ),
-    });
-
-    items.push({
-      title: 'Loading state',
-      children: renderElement(
-        component,
-        componentMeta,
-        paramUpdated,
-        dataQueries,
-        'loadingState',
+        'plotFromJson',
         'properties',
         currentState
       ),
     });
 
-    if (chartType !== 'pie') {
+    if (plotFromJson) {
       items.push({
-        title: 'Marker color',
+        title: 'Bar mode',
         children: renderElement(
           component,
           componentMeta,
           paramUpdated,
           dataQueries,
-          'markerColor',
-          'properties',
-          currentState
-        ),
-      });
-
-      items.push({
-        title: 'Show grid lines',
-        children: renderElement(
-          component,
-          componentMeta,
-          paramUpdated,
-          dataQueries,
-          'showGridLines',
+          'barmode',
           'properties',
           currentState
         ),
       });
     }
 
+    if (plotFromJson) {
+      items.push({
+        title: 'JSON description',
+        children: (
+          <CodeHinter
+            type="basic"
+            initialValue={jsonDescription?.value ?? {}}
+            className="chart-input pr-2"
+            onChange={(value) => this.props.paramUpdated({ name: 'jsonDescription' }, 'value', value, 'properties')}
+            componentName={`component/${this.props.component.component.name}::${chartType}`}
+          />
+        ),
+      });
+    } else {
+      items.push({
+        title: 'Properties',
+        children: renderElement(
+          component,
+          componentMeta,
+          paramUpdated,
+          dataQueries,
+          'type',
+          'properties',
+          currentState,
+          components
+        ),
+      });
+
+      items.push({
+        title: 'Chart data',
+        children: (
+          <CodeHinter
+            type="basic"
+            initialValue={data.value}
+            className="chart-input pr-2"
+            onChange={(value) => this.props.paramUpdated({ name: 'data' }, 'value', value, 'properties')}
+            componentName={`component/${this.props.component.component.name}::${chartType}`}
+          />
+        ),
+      });
+    }
+
+    if (chartType !== 'pie') {
+      if (!plotFromJson) {
+        items.push({
+          title: 'Marker color',
+          children: renderElement(
+            component,
+            componentMeta,
+            paramUpdated,
+            dataQueries,
+            'markerColor',
+            'properties',
+            currentState
+          ),
+        });
+      }
+
+      items.push({
+        title: 'Options',
+        children: (
+          <>
+            {renderElement(
+              component,
+              componentMeta,
+              paramUpdated,
+              dataQueries,
+              'loadingState',
+              'properties',
+              currentState
+            )}
+            {renderElement(component, componentMeta, paramUpdated, dataQueries, 'showAxes', 'properties', currentState)}
+            {renderElement(
+              component,
+              componentMeta,
+              paramUpdated,
+              dataQueries,
+              'showGridLines',
+              'properties',
+              currentState
+            )}
+          </>
+        ),
+      });
+    }
+
     items.push({
-      title: 'Layout',
-      isOpen: false,
+      title: 'Events',
+      children: (
+        <EventManager
+          sourceId={component?.id}
+          eventSourceType="component"
+          eventMetaDefinition={componentMeta}
+          currentState={currentState}
+          dataQueries={dataQueries}
+          components={allComponents}
+          eventsChanged={eventsChanged}
+          apps={apps}
+          darkMode={darkMode}
+          pages={pages}
+        />
+      ),
+    });
+
+    items.push({
+      title: 'Devices',
       children: (
         <>
           {renderElement(

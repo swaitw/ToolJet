@@ -1,69 +1,175 @@
 import React, { useState, useEffect } from 'react';
-import { resolveReferences, resolveWidgetFieldValue } from '@/_helpers/utils';
 import DOMPurify from 'dompurify';
+// eslint-disable-next-line import/no-unresolved
+import Markdown from 'react-markdown';
+import './text.scss';
+import Loader from '@/ToolJetUI/Loader/Loader';
 
-export const Text = function Text({ id, height, component, onComponentClick, currentState }) {
-  const text = component.definition.properties.text.value;
-  const color = component.definition.styles.textColor.value;
-  const widgetVisibility = component.definition.styles?.visibility?.value ?? true;
-  const disabledState = component.definition.styles?.disabledState?.value ?? false;
+const VERTICAL_ALIGNMENT_VS_CSS_VALUE = {
+  top: 'flex-start',
+  center: 'center',
+  bottom: 'flex-end',
+};
 
-  const parsedDisabledState =
-    typeof disabledState !== 'boolean' ? resolveWidgetFieldValue(disabledState, currentState) : disabledState;
-
-  const [loadingState, setLoadingState] = useState(false);
+export const Text = function Text({ height, properties, fireEvent, styles, darkMode, setExposedVariable, dataCy }) {
+  let {
+    textSize,
+    textColor,
+    textAlign,
+    backgroundColor,
+    fontWeight,
+    decoration,
+    transformation,
+    fontStyle,
+    lineHeight,
+    textIndent,
+    letterSpacing,
+    wordSpacing,
+    fontVariant,
+    boxShadow,
+    verticalAlignment,
+    borderColor,
+    borderRadius,
+    isScrollRequired,
+  } = styles;
+  const { loadingState, textFormat, disabledState } = properties;
+  const [text, setText] = useState(() => computeText());
+  const [visibility, setVisibility] = useState(properties.visibility);
+  const [isLoading, setLoading] = useState(loadingState);
+  const [isDisabled, setIsDisabled] = useState(disabledState);
+  const color = ['#000', '#000000'].includes(textColor) ? (darkMode ? '#fff' : '#000') : textColor;
 
   useEffect(() => {
-    const loadingStateProperty = component.definition.properties.loadingState;
-    if (loadingStateProperty && currentState) {
-      const newState = resolveReferences(loadingStateProperty.value, currentState, false);
-      setLoadingState(newState);
-    }
+    if (visibility !== properties.visibility) setVisibility(properties.visibility);
+    if (isLoading !== loadingState) setLoading(loadingState);
+    if (isDisabled !== disabledState) setIsDisabled(disabledState);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentState]);
+  }, [properties.visibility, loadingState, disabledState]);
 
-  let data = text;
-  if (currentState) {
-    const matchedParams = text.match(/\{\{(.*?)\}\}/g);
+  useEffect(() => {
+    const text = computeText();
+    setText(text);
+    setExposedVariable('text', text);
 
-    if (matchedParams) {
-      for (const param of matchedParams) {
-        const resolvedParam = resolveReferences(param, currentState, '');
-        console.log('resolved param', param, resolvedParam);
-        data = data.replace(param, resolvedParam);
-      }
-    }
+    setExposedVariable('setText', async function (text) {
+      setText(text);
+      setExposedVariable('text', text);
+    });
+    setExposedVariable('clear', async function (text) {
+      setText('');
+      setExposedVariable('text', '');
+    });
+    setExposedVariable('isVisible', properties.visibility);
+    setExposedVariable('isLoading', loadingState);
+    setExposedVariable('isDisabled', disabledState);
+
+    setExposedVariable('visibility', async function (value) {
+      setVisibility(value);
+    });
+
+    setExposedVariable('setVisibility', async function (value) {
+      setVisibility(value);
+    });
+
+    setExposedVariable('setLoading', async function (value) {
+      setLoading(value);
+    });
+
+    setExposedVariable('setDisable', async function (value) {
+      setIsDisabled(value);
+    });
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    properties.text,
+    setText,
+    setVisibility,
+    properties.visibility,
+    loadingState,
+    disabledState,
+    setIsDisabled,
+    setLoading,
+  ]);
+
+  function computeText() {
+    return properties.text === 0 || properties.text === false ? properties.text?.toString() : properties.text;
   }
 
-  let parsedWidgetVisibility = widgetVisibility;
-
-  try {
-    parsedWidgetVisibility = resolveReferences(parsedWidgetVisibility, currentState, []);
-  } catch (err) {
-    console.log(err);
-  }
+  const handleClick = () => {
+    fireEvent('onClick');
+  };
 
   const computedStyles = {
+    height: `${height}px`,
+    backgroundColor: darkMode && ['#edeff5'].includes(backgroundColor) ? '#2f3c4c' : backgroundColor,
     color,
-    height,
-    display: parsedWidgetVisibility ? 'flex' : 'none',
-    alignItems: 'center',
+    display: visibility ? 'flex' : 'none',
+    fontWeight: fontWeight ? fontWeight : fontWeight === '0' ? 0 : 'normal',
+    lineHeight: lineHeight ?? 1.5,
+    textDecoration: decoration ?? 'none',
+    textTransform: transformation ?? 'none',
+    fontStyle: fontStyle ?? 'none',
+    fontVariant: fontVariant ?? 'normal',
+    textIndent: `${textIndent}px` ?? '0px',
+    letterSpacing: `${letterSpacing}px` ?? '0px',
+    wordSpacing: `${wordSpacing}px` ?? '0px',
+    boxShadow,
+    border: '1px solid',
+    borderColor: darkMode && ['#f2f2f5'].includes(borderColor) ? '#2f3c4c' : borderColor ? borderColor : 'transparent',
+    borderRadius: borderRadius ? `${borderRadius}px` : '0px',
+    fontSize: `${textSize}px`,
+  };
+
+  const commonStyles = {
+    width: '100%',
+    height: '100%',
+    overflowY: isScrollRequired == 'enabled' ? 'auto' : 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: VERTICAL_ALIGNMENT_VS_CSS_VALUE[verticalAlignment],
+    textAlign,
+    overflowX: isScrollRequired === 'disabled' && 'hidden',
+  };
+
+  const commonScrollStyle = {
+    overflowY: isScrollRequired == 'enabled' ? 'scroll' : 'hidden',
   };
 
   return (
     <div
-      data-disabled={parsedDisabledState}
+      data-disabled={isDisabled}
       className="text-widget"
       style={computedStyles}
-      onClick={(event) => {
-        event.stopPropagation();
-        onComponentClick(id, component, event);
+      data-cy={dataCy}
+      onMouseOver={() => {
+        fireEvent('onHover');
       }}
+      onClick={handleClick}
     >
-      {!loadingState && <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data) }} />}
-      {loadingState === true && (
-        <div>
-          <div className="skeleton-line w-10"></div>
+      {!isLoading && (
+        <div style={commonStyles} className="text-widget-section">
+          {textFormat === 'plainText' && <div style={commonScrollStyle}>{text}</div>}
+          {textFormat === 'markdown' && (
+            <div style={commonScrollStyle}>
+              <Markdown className={'reactMarkdown'}>{text}</Markdown>
+            </div>
+          )}
+          {(textFormat === 'html' || !textFormat) && (
+            <div
+              style={commonScrollStyle}
+              dangerouslySetInnerHTML={{
+                __html: DOMPurify.sanitize(text || ''),
+              }}
+            />
+          )}
+        </div>
+      )}
+      {isLoading === true && (
+        <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <center>
+            <Loader width="16" absolute={false} />
+          </center>
         </div>
       )}
     </div>

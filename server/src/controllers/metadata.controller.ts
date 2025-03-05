@@ -1,31 +1,10 @@
-import { Controller, Get, Request, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { MetadataService } from '@services/metadata.service';
 import { JwtAuthGuard } from '../modules/auth/jwt-auth.guard';
 
 @Controller('metadata')
 export class MetadataController {
   constructor(private metadataService: MetadataService) {}
-
-  @UseGuards(JwtAuthGuard)
-  @Post('finish_installation')
-  async finishInstallation(@Request() req) {
-    const { name, email } = req.body;
-    const installedVersion = globalThis.TOOLJET_VERSION;
-
-    await this.metadataService.finishInstallation(installedVersion, name, email);
-
-    await this.metadataService.updateMetaData({
-      onboarded: true,
-    });
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post('skip_onboarding')
-  async skipOnboarding() {
-    await this.metadataService.updateMetaData({
-      onboarded: true,
-    });
-  }
 
   @UseGuards(JwtAuthGuard)
   @Post('skip_version')
@@ -39,30 +18,34 @@ export class MetadataController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get()
-  async getMetadata(@Request() req) {
+  async getMetadata() {
     const metadata = await this.metadataService.getMetaData();
     const data = metadata.data;
-
     let latestVersion = data['latest_version'];
     let versionIgnored = data['version_ignored'] || false;
-    const installedVersion = globalThis.TOOLJET_VERSION;
+    const instanceId = metadata['id'];
     const onboarded = data['onboarded'];
-    const ignoredVersion = data['ignored_version'];
-    const now = new Date();
 
-    const updateLastCheckedAt = new Date(data['last_checked'] || null);
-    const diffTime = (now.getTime() - updateLastCheckedAt.getTime()) / 1000;
+    if (process.env.NODE_ENV == 'production') {
+      if (
+        process.env.CHECK_FOR_UPDATES === '1' ||
+        process.env.CHECK_FOR_UPDATES === 'true' ||
+        !process.env.CHECK_FOR_UPDATES
+      ) {
+        const result = await this.metadataService.checkForUpdates(metadata);
+        latestVersion = result.latestVersion;
+        versionIgnored = false;
+      }
 
-    if (diffTime > 86400) {
-      const result = await this.metadataService.checkForUpdates(installedVersion, ignoredVersion);
-      latestVersion = result.latestVersion;
-      versionIgnored = false;
+      if (process.env.DISABLE_TOOLJET_TELEMETRY !== 'true') {
+        void this.metadataService.sendTelemetryData(metadata);
+      }
     }
 
     return {
-      installed_version: installedVersion,
+      instance_id: instanceId,
+      installed_version: globalThis.TOOLJET_VERSION,
       latest_version: latestVersion,
       onboarded: onboarded,
       version_ignored: versionIgnored,

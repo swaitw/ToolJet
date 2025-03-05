@@ -14,11 +14,12 @@
     "incremental": true,
     "paths": {
       "@ee/*": ["ee/*"],
+      "@entities/*": ["src/entities/*"],
       "@services/*": ["src/services/*"],
-      "@plugins/*": ["plugins/*"],
       "@controllers/*": ["src/controllers/*"],
       "@repositories/*": ["src/repositories/*"],
       "@dto/*": ["src/dto/*"]
-    }
-  }
+    },
+  },
+  "exclude": ["node_modules", "dist"]
 }

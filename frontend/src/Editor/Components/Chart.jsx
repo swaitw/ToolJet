@@ -1,73 +1,101 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { resolveReferences, resolveWidgetFieldValue } from '@/_helpers/utils';
-
-// Use plotly basic bundle
-import Plotly from 'plotly.js-basic-dist-min';
+import React, { useState, useEffect, useMemo, memo, useCallback } from 'react';
+// eslint-disable-next-line import/no-unresolved
+import Plotly from 'plotly.js-dist-min';
 import createPlotlyComponent from 'react-plotly.js/factory';
+import { isJson } from '@/_helpers/utils';
 const Plot = createPlotlyComponent(Plotly);
+import { isEqual } from 'lodash';
+import { deepClone } from '@/_helpers/utilities/utils.helpers';
+var tinycolor = require('tinycolor2');
 
-export const Chart = function Chart({ id, width, height, component, onComponentClick, currentState, darkMode }) {
+export const Chart = function Chart({
+  width,
+  height,
+  darkMode,
+  properties,
+  styles,
+  fireEvent,
+  setExposedVariable,
+  setExposedVariables,
+  dataCy,
+}) {
   const [loadingState, setLoadingState] = useState(false);
 
-  const widgetVisibility = component.definition.styles?.visibility?.value ?? true;
-  const disabledState = component.definition.styles?.disabledState?.value ?? false;
+  const getColor = (color) => {
+    if (tinycolor(color).getBrightness() > 128) return '#000';
+    return '#fff';
+  };
 
-  let parsedWidgetVisibility = widgetVisibility;
-  const parsedDisabledState =
-    typeof disabledState !== 'boolean' ? resolveWidgetFieldValue(disabledState, currentState) : disabledState;
-
-  try {
-    parsedWidgetVisibility = resolveReferences(parsedWidgetVisibility, currentState, []);
-  } catch (err) {
-    console.log(err);
-  }
+  const { padding, visibility, disabledState, boxShadow, backgroundColor, borderRadius } = styles;
+  const { title, markerColor, showGridLines, type, data, jsonDescription, plotFromJson, showAxes, barmode } =
+    properties;
 
   useEffect(() => {
-    const loadingStateProperty = component.definition.properties.loadingState;
-    if (loadingStateProperty && currentState) {
-      const newState = resolveReferences(loadingStateProperty.value, currentState, false);
-      setLoadingState(newState);
+    const loadingStateProperty = properties.loadingState;
+    if (loadingStateProperty != undefined) {
+      setLoadingState(loadingStateProperty);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentState]);
+  }, [properties.loadingState]);
 
   const computedStyles = {
     width: width - 4,
     height,
-    display: parsedWidgetVisibility ? '' : 'none',
+    display: visibility ? '' : 'none',
     background: darkMode ? '#1f2936' : 'white',
+    boxShadow,
+    borderRadius,
   };
+  const dataString = data ?? [];
 
-  // darkMode ? '#1f2936' : 'white'
-  const dataProperty = component.definition.properties.data;
-  const dataString = dataProperty ? dataProperty.value : [];
+  const chartType = type;
 
-  const titleProperty = component.definition.properties.title;
-  const title = titleProperty.value;
+  const jsonData = typeof jsonDescription === 'object' ? JSON.stringify(jsonDescription) : jsonDescription;
 
-  const typeProperty = component.definition.properties.type;
-  const chartType = typeProperty.value;
+  const isDescriptionJson = plotFromJson ? isJson(jsonData) : false;
 
-  const markerColorProperty = component.definition.properties.markerColor;
-  const markerColor = markerColorProperty ? markerColorProperty.value : 'red';
+  const jsonChartData = isDescriptionJson ? JSON.parse(jsonData).data : [];
 
-  const gridLinesProperty = component.definition.properties.showGridLines;
-  const showGridLines = gridLinesProperty ? gridLinesProperty.value : true;
-  const fontColor = darkMode ? '#c3c3c3' : null;
+  const chartLayout = isDescriptionJson ? JSON.parse(jsonData).layout ?? {} : {};
+
+  const updatedBgColor = ['#fff', '#ffffff'].includes(backgroundColor)
+    ? darkMode
+      ? '#1f2936'
+      : '#fff'
+    : backgroundColor;
+  const fontColor = getColor(updatedBgColor);
+
+  const chartTitle = plotFromJson ? chartLayout?.title ?? title : title;
+
+  useEffect(() => {
+    const { xaxis, yaxis } = chartLayout;
+    let xAxisTitle, yAxisTitle;
+    if (xaxis) {
+      xAxisTitle = xaxis?.title?.text;
+    }
+    if (yaxis) {
+      yAxisTitle = yaxis?.title?.text;
+    }
+    const exposedVariables = {
+      chartTitle: chartTitle,
+      xAxisTitle: xAxisTitle,
+      yAxisTitle: yAxisTitle,
+    };
+    setExposedVariables(exposedVariables);
+  }, [JSON.stringify(chartLayout, chartTitle)]);
 
   const layout = {
     width: width - 4,
     height,
-    plot_bgcolor: darkMode ? '#1f2936' : null,
-    paper_bgcolor: darkMode ? '#1f2936' : null,
+    plot_bgcolor: updatedBgColor,
+    paper_bgcolor: updatedBgColor,
     title: {
-      text: title,
+      text: chartTitle,
       font: {
         color: fontColor,
       },
     },
     legend: {
-      text: title,
+      text: chartTitle,
       font: {
         color: fontColor,
       },
@@ -76,15 +104,28 @@ export const Chart = function Chart({ id, width, height, component, onComponentC
       showgrid: showGridLines,
       showline: true,
       color: fontColor,
+      automargin: true,
+      visible: showAxes,
+      ...chartLayout.xaxis,
     },
     yaxis: {
       showgrid: showGridLines,
       showline: true,
       color: fontColor,
+      automargin: true,
+      visible: showAxes,
+      ...chartLayout.yaxis,
     },
+    margin: {
+      l: padding,
+      r: padding,
+      b: padding,
+      t: padding,
+    },
+    ...(chartLayout.annotations && { annotations: chartLayout.annotations }),
+    barmode: barmode,
+    hoverlabel: { namelength: -1 },
   };
-
-  const data = resolveReferences(dataString, currentState, []);
 
   const computeChartData = (data, dataString) => {
     let rawData = data;
@@ -106,8 +147,8 @@ export const Chart = function Chart({ id, width, height, component, onComponentC
       newData = [
         {
           type: chartType,
-          values: rawData.map((item) => item['value']),
-          labels: rawData.map((item) => item['label']),
+          values: rawData.map((item) => item['y']),
+          labels: rawData.map((item) => item['x']),
         },
       ];
     } else {
@@ -124,34 +165,84 @@ export const Chart = function Chart({ id, width, height, component, onComponentC
     return newData;
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const memoizedChartData = useMemo(() => computeChartData(data, dataString), [data, dataString]);
+  const memoizedChartData = useMemo(
+    () => computeChartData(data, dataString),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, dataString, chartType, markerColor]
+  );
+
+  const handleClick = useCallback((data) => {
+    if (data.length > 0) {
+      const {
+        x: xAxisLabel,
+        y: yAxisLabel,
+        label: dataLabel,
+        value: dataValue,
+        percent: dataPercent,
+        fullData: { name } = {},
+      } = data[0];
+      setExposedVariable('clickedDataPoint', {
+        xAxisLabel,
+        yAxisLabel,
+        dataLabel,
+        dataValue,
+        dataPercent,
+        dataSeriesName: name,
+      });
+      fireEvent('onClick');
+    }
+  }, []);
+
+  const handleDoubleClick = useCallback(() => {
+    fireEvent('onDoubleClick');
+  }, []);
+
+  useEffect(() => {
+    setExposedVariable('clearClickedPoint', () => {
+      setExposedVariable('clickedDataPoint', {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div
-      data-disabled={parsedDisabledState}
-      style={computedStyles}
-      onClick={(event) => {
-        event.stopPropagation();
-        onComponentClick(id, component, event);
-      }}
-    >
+    <div class="widget-chart" data-disabled={disabledState} style={computedStyles} data-cy={dataCy}>
       {loadingState === true ? (
-        <div style={{ width }} className="p-2">
+        <div style={{ width }} className="p-2 loader-main-container">
           <center>
             <div className="spinner-border mt-5" role="status"></div>
           </center>
         </div>
       ) : (
-        <Plot
-          data={memoizedChartData}
+        <PlotComponent
+          data={plotFromJson ? jsonChartData : memoizedChartData}
           layout={layout}
           config={{
             displayModeBar: false,
-            // staticPlot: true
           }}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
         />
       )}
     </div>
   );
 };
+
+// onClick event was not working when the component is re-rendered for every click. Hance, memoization is used
+const PlotComponent = memo(
+  ({ data, layout, config, onClick, onDoubleClick }) => {
+    return (
+      <Plot
+        data={data}
+        layout={deepClone(layout)} // Cloning the layout since the object is getting mutated inside the package
+        config={config}
+        onClick={(e) => {
+          onClick(e.points);
+        }}
+        onDoubleClick={() => {
+          onDoubleClick();
+        }}
+      />
+    );
+  },
+  (prevProps, nextProps) => isEqual(prevProps, nextProps)
+);

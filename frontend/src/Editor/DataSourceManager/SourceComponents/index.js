@@ -1,87 +1,79 @@
 import React from 'react';
-
 import DynamicForm from '@/_components/DynamicForm';
+import RunjsSchema from './Runjs.schema.json';
+import TooljetDbSchema from '../../QueryManager/QueryEditors/TooljetDatabase/manifest.json';
+import RunpySchema from './Runpy.schema.json';
 
-// API sources
-import AirtableSchema from './Api/Airtable.schema.json';
-import RestapiSchema from './Api/Restapi.schema.json';
-import GraphqlSchema from './Api/Graphql.schema.json';
-import StripeSchema from './Api/Stripe.schema.json';
-import GooglesheetSchema from './Api/Googlesheets.schema.json';
-import SlackSchema from './Api/Slack.schema.json';
+// eslint-disable-next-line import/no-unresolved
+import { allManifests } from '@tooljet/plugins/client';
 
-// Database sources
-import DynamodbSchema from './Database/Dynamodb.schema.json';
-import ElasticsearchSchema from './Database/Elasticsearch.schema.json';
-import RedisSchema from './Database/Redis.schema.json';
-import FirestoreSchema from './Database/Firestore.schema.json';
-import MongodbSchema from './Database/Mongodb.schema.json';
-import PostgresqlSchema from './Database/Postgresql.schema.json';
-import MysqlSchema from './Database/Mysql.schema.json';
-import MssqlSchema from './Database/Mssql.schema.json';
+//Commonly Used DS
 
-// Cloud storage sources
-import S3Schema from './Database/S3.schema.json';
-import GcsSchema from './Database/Gcs.schema.json';
+export const CommonlyUsedDataSources = Object.keys(allManifests)
+  .reduce((accumulator, currentValue) => {
+    const sourceName = allManifests[currentValue]?.source?.name;
+    if (
+      sourceName === 'Rest API' ||
+      sourceName === 'MongoDB' ||
+      sourceName === 'Airtable' ||
+      sourceName === 'Google Sheets' ||
+      sourceName === 'PostgreSQL'
+    ) {
+      const _source = allManifests[currentValue].source;
+      const def = allManifests[currentValue]?.defaults ?? {};
+      accumulator.push({ ..._source, defaults: def });
+    }
 
-// Other sources
-import RunjsSchema from './Api/Runjs.schema.json';
+    return accumulator;
+  }, [])
+  .sort((a, b) => {
+    const order = ['Rest API', 'PostgreSQL', 'Google Sheets', 'Airtable', 'MongoDB'];
+    return order.indexOf(a.name) - order.indexOf(b.name);
+  });
 
-const Airtable = ({ ...rest }) => <DynamicForm schema={AirtableSchema} {...rest} />;
-const Restapi = ({ ...rest }) => <DynamicForm schema={RestapiSchema} {...rest} />;
-const Graphql = ({ ...rest }) => <DynamicForm schema={GraphqlSchema} {...rest} />;
-const Stripe = ({ ...rest }) => <DynamicForm schema={StripeSchema} {...rest} />;
-const Googlesheets = ({ ...rest }) => <DynamicForm schema={GooglesheetSchema} {...rest} />;
-const Slack = ({ ...rest }) => <DynamicForm schema={SlackSchema} {...rest} />;
-const Dynamodb = ({ ...rest }) => <DynamicForm schema={DynamodbSchema} {...rest} />;
-const Elasticsearch = ({ ...rest }) => <DynamicForm schema={ElasticsearchSchema} {...rest} />;
-const Redis = ({ ...rest }) => <DynamicForm schema={RedisSchema} {...rest} />;
-const Firestore = ({ ...rest }) => <DynamicForm schema={FirestoreSchema} {...rest} />;
-const Mongodb = ({ ...rest }) => <DynamicForm schema={MongodbSchema} {...rest} />;
-const Postgresql = ({ ...rest }) => <DynamicForm schema={PostgresqlSchema} {...rest} />;
-const Mysql = ({ ...rest }) => <DynamicForm schema={MysqlSchema} {...rest} />;
-const Mssql = ({ ...rest }) => <DynamicForm schema={MssqlSchema} {...rest} />;
-const S3 = ({ ...rest }) => <DynamicForm schema={S3Schema} {...rest} />;
-const Gcs = ({ ...rest }) => <DynamicForm schema={GcsSchema} {...rest} />;
+export const DataBaseSources = Object.keys(allManifests).reduce((accumulator, currentValue) => {
+  if (allManifests[currentValue].type === 'database') {
+    const _source = allManifests[currentValue].source;
+    const def = allManifests[currentValue]?.defaults ?? {};
 
-export const DataBaseSources = [
-  DynamodbSchema.source,
-  ElasticsearchSchema.source,
-  RedisSchema.source,
-  FirestoreSchema.source,
-  MongodbSchema.source,
-  PostgresqlSchema.source,
-  MysqlSchema.source,
-  MssqlSchema.source,
+    accumulator.push({ ..._source, defaults: def });
+  }
+
+  return accumulator;
+}, []);
+export const ApiSources = Object.keys(allManifests).reduce((accumulator, currentValue) => {
+  if (allManifests[currentValue].type === 'api') {
+    const _source = allManifests[currentValue].source;
+    const def = allManifests[currentValue]?.defaults ?? {};
+
+    accumulator.push({ ..._source, defaults: def });
+  }
+
+  return accumulator;
+}, []);
+export const CloudStorageSources = Object.keys(allManifests).reduce((accumulator, currentValue) => {
+  if (allManifests[currentValue].type === 'cloud-storage') {
+    const _source = allManifests[currentValue].source;
+    const def = allManifests[currentValue]?.defaults ?? {};
+
+    accumulator.push({ ..._source, defaults: def });
+  }
+
+  return accumulator;
+}, []);
+
+export const OtherSources = [RunjsSchema.source, RunpySchema.source, TooljetDbSchema.source];
+export const DataSourceTypes = [
+  ...DataBaseSources,
+  ...ApiSources,
+  ...CloudStorageSources,
+  ...OtherSources,
+  ...CommonlyUsedDataSources,
 ];
-export const ApiSources = [
-  AirtableSchema.source,
-  RestapiSchema.source,
-  GraphqlSchema.source,
-  StripeSchema.source,
-  GooglesheetSchema.source,
-  SlackSchema.source,
-];
 
-export const OtherSources = [RunjsSchema.source];
-export const CloudStorageSources = [S3Schema.source, GcsSchema.source];
-export const DataSourceTypes = [...DataBaseSources, ...ApiSources, ...CloudStorageSources, ...OtherSources];
+export const SourceComponents = Object.keys(allManifests).reduce((accumulator, currentValue) => {
+  accumulator[currentValue] = (props) => <DynamicForm schema={allManifests[currentValue]} isGDS={true} {...props} />;
+  return accumulator;
+}, {});
 
-export const SourceComponents = {
-  Elasticsearch,
-  Redis,
-  Postgresql,
-  Stripe,
-  Firestore,
-  Restapi,
-  Googlesheets,
-  Slack,
-  Mongodb,
-  Dynamodb,
-  Airtable,
-  Graphql,
-  Mysql,
-  Mssql,
-  S3,
-  Gcs,
-};
+export const SourceComponent = (props) => <DynamicForm schema={props.dataSourceSchema} isGDS={true} {...props} />;

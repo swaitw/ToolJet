@@ -1,20 +1,18 @@
 import React from 'react';
 import cx from 'classnames';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 import { commentsService } from '@/_services';
 
 import { pluralize } from '@/_helpers/utils';
 
 import Spinner from '@/_ui/Spinner';
-import useRouter from '@/_hooks/use-router';
 
 import UnResolvedIcon from './icons/unresolved.svg';
 import ResolvedIcon from './icons/resolved.svg';
 
-const CommentHeader = ({ socket, count = 0, threadId, isResolved, isThreadOwner, fetchThreads, close }) => {
+const CommentHeader = ({ socket, count = 0, threadId, isResolved, isThreadOwner, fetchThreads, close, appId }) => {
   const [spinning, setSpinning] = React.useState(false);
-  const router = useRouter();
 
   const handleResolved = async () => {
     setSpinning(true);
@@ -24,7 +22,7 @@ const CommentHeader = ({ socket, count = 0, threadId, isResolved, isThreadOwner,
     socket.send(
       JSON.stringify({
         event: 'events',
-        data: { message: 'notifications', appId: router.query.id },
+        data: { message: 'notifications', appId },
       })
     );
     if (!isResolved) {
@@ -41,7 +39,7 @@ const CommentHeader = ({ socket, count = 0, threadId, isResolved, isThreadOwner,
     socket.send(
       JSON.stringify({
         event: 'events',
-        data: { message: 'notifications', appId: router.query.id },
+        data: { message: 'notifications', appId },
       })
     );
   };
@@ -77,7 +75,7 @@ const CommentHeader = ({ socket, count = 0, threadId, isResolved, isThreadOwner,
       <div className="ms-auto d-flex">
         <span
           title={isThreadOwner ? 'toggle resolved' : 'only creator of thread can resolve'}
-          className={cx('m-1 cursor-pointer', { disabled: !isThreadOwner })}
+          className={cx('m-1 cursor-pointer', { disabled: !isThreadOwner, 'd-none': !isResolved && !isThreadOwner })}
           onClick={handleResolved}
         >
           {getResolveIcon()}
@@ -102,7 +100,7 @@ const CommentHeader = ({ socket, count = 0, threadId, isResolved, isThreadOwner,
               fillRule="evenodd"
               clipRule="evenodd"
               d="M6.64628 7.62107L11.6712 12.6474L12.647 11.673L7.62067 6.64669L12.647 1.62176L11.6726 0.645996L6.64628 5.6723L1.62136 0.645996L0.646973 1.62176L5.6719 6.64669L0.646973 11.6716L1.62136 12.6474L6.64628 7.62107Z"
-              fill="black"
+              fill="currentColor"
             />
           </svg>
         </div>

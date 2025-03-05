@@ -1,54 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import 'react-datetime/css/react-datetime.css';
 import { DateRangePicker } from 'react-dates';
 import 'react-dates/lib/css/_datepicker.css';
 import 'react-dates/initialize';
-import { resolveReferences, resolveWidgetFieldValue } from '@/_helpers/utils';
+import moment from 'moment';
 
 export const DaterangePicker = function DaterangePicker({
-  id,
   height,
-  component,
-  onComponentClick,
-  currentState,
-  onComponentOptionChanged,
+  properties,
+  styles,
+  setExposedVariable,
+  width,
+  darkMode,
+  fireEvent,
+  dataCy,
 }) {
-  console.log('currentState', currentState);
-
-  const startDateProp = component.definition.properties.startDate;
-  const endDateProp = component.definition.properties.endDate;
-  const formatProp = component.definition.properties.format;
-  const widgetVisibility = component.definition.styles?.visibility?.value ?? true;
-  const disabledState = component.definition.styles?.disabledState?.value ?? false;
-  const parsedDisabledState =
-    typeof disabledState !== 'boolean' ? resolveWidgetFieldValue(disabledState, currentState) : disabledState;
+  const { borderRadius, visibility, disabledState, boxShadow } = styles;
+  const { defaultStartDate, defaultEndDate } = properties;
+  const formatProp = typeof properties.format === 'string' ? properties.format : '';
 
   const [focusedInput, setFocusedInput] = useState(null);
-  const [startDate, setStartDate] = useState(startDateProp ? startDateProp.value : null);
-  const [endDate, setEndDate] = useState(endDateProp ? endDateProp.value : null);
+  const [startDate, setStartDate] = useState(moment(defaultStartDate, formatProp));
+  const [endDate, setEndDate] = useState(moment(defaultEndDate, formatProp));
 
-  let parsedWidgetVisibility = widgetVisibility;
+  const dateRangeRef = useRef(null);
 
-  try {
-    parsedWidgetVisibility = resolveReferences(parsedWidgetVisibility, currentState, []);
-  } catch (err) {
-    console.log(err);
-  }
+  useEffect(() => {
+    setStartDate(moment(defaultStartDate, formatProp));
+    setEndDate(moment(defaultEndDate, formatProp));
+    setExposedVariable('startDate', startDate.format(formatProp));
+    setExposedVariable('endDate', endDate.format(formatProp));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultEndDate, defaultStartDate, formatProp]);
+
+  useEffect(() => {
+    dateRangeRef.current.container.querySelector('.DateRangePickerInput').style.borderRadius = `${Number.parseFloat(
+      borderRadius
+    )}px`;
+    dateRangeRef.current.container.querySelector('.DateRangePickerInput').style.height = `${height}px`;
+    dateRangeRef.current.container.querySelector('.DateRangePickerInput').style.width = `${width - 3}px`;
+    dateRangeRef.current.container.querySelector('.DateRangePickerInput').style.boxShadow = boxShadow;
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRangeRef.current, borderRadius, height, width, boxShadow]);
 
   function onDateChange(dates) {
     const start = dates.startDate;
     const end = dates.endDate;
 
     if (start) {
-      onComponentOptionChanged(component, 'startDate', start.format(formatProp.value));
+      setExposedVariable('startDate', start.format(formatProp));
     }
 
     if (end) {
-      onComponentOptionChanged(component, 'endDate', end.format(formatProp.value));
+      setExposedVariable('endDate', end.format(formatProp));
     }
 
     setStartDate(start);
     setEndDate(end);
+    fireEvent('onSelect');
   }
 
   function focusChanged(focus) {
@@ -57,15 +67,12 @@ export const DaterangePicker = function DaterangePicker({
 
   return (
     <div
-      className="daterange-picker-widget p-0"
-      style={{ height, display: parsedWidgetVisibility ? '' : 'none' }}
-      onClick={(event) => {
-        event.stopPropagation();
-        onComponentClick(id, component, event);
-      }}
+      className={`daterange-picker-widget ${darkMode && 'theme-dark'} p-0`}
+      style={{ height, display: visibility ? '' : 'none', borderRadius, background: 'transparent' }}
+      data-cy={dataCy}
     >
       <DateRangePicker
-        disabled={parsedDisabledState}
+        disabled={disabledState}
         startDate={startDate}
         startDateId="startDate"
         isOutsideRange={() => false}
@@ -75,6 +82,8 @@ export const DaterangePicker = function DaterangePicker({
         onFocusChange={(focus) => focusChanged(focus)}
         focusedInput={focusedInput}
         hideKeyboardShortcutsPanel={true}
+        displayFormat={formatProp}
+        ref={dateRangeRef}
       />
     </div>
   );

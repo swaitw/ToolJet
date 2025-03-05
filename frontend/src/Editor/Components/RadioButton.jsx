@@ -1,93 +1,58 @@
-import React, { useEffect } from 'react';
-import { resolveReferences, resolveWidgetFieldValue } from '@/_helpers/utils';
+import React, { useEffect, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 
 export const RadioButton = function RadioButton({
   id,
   height,
-  component,
-  onComponentClick,
-  currentState,
-  onComponentOptionChanged,
-  onEvent,
+  properties,
+  styles,
+  fireEvent,
+  setExposedVariable,
+  setExposedVariables,
+  darkMode,
+  dataCy,
 }) {
-  const label = component.definition.properties.label.value;
-  const textColorProperty = component.definition.styles.textColor;
-  const textColor = textColorProperty ? textColorProperty.value : '#000';
-
-  const defaultValue = component.definition.properties.value.value;
-  const values = component.definition.properties.values.value;
-  const displayValues = component.definition.properties.display_values.value;
-  const widgetVisibility = component.definition.styles?.visibility?.value ?? true;
-  const disabledState = component.definition.styles?.disabledState?.value ?? false;
-
-  const parsedDisabledState =
-    typeof disabledState !== 'boolean' ? resolveWidgetFieldValue(disabledState, currentState) : disabledState;
-
-  let parsedValues = values;
-
-  try {
-    parsedValues = resolveReferences(values, currentState, []);
-  } catch (err) {
-    console.log(err);
-  }
-
-  let parsedDisplayValues = displayValues;
-
-  try {
-    parsedDisplayValues = resolveReferences(displayValues, currentState, []);
-  } catch (err) {
-    console.log(err);
-  }
-
-  let parsedDefaultValue = defaultValue;
-
-  try {
-    parsedDefaultValue = resolveReferences(defaultValue, currentState, []);
-  } catch (err) {
-    console.log(err);
-  }
-
-  const value = currentState?.components[component?.name]?.value ?? parsedDefaultValue;
+  const { label, value, values, display_values } = properties;
+  const { visibility, disabledState, activeColor, boxShadow } = styles;
+  const textColor = darkMode && styles.textColor === '#000' ? '#fff' : styles.textColor;
+  const [checkedValue, setValue] = useState(() => value);
+  useEffect(() => setValue(value), [value]);
 
   let selectOptions = [];
 
   try {
     selectOptions = [
-      ...parsedValues.map((value, index) => {
-        return { name: parsedDisplayValues[index], value: value };
+      ...values.map((value, index) => {
+        return { name: display_values[index], value: value };
       }),
     ];
   } catch (err) {
     console.log(err);
   }
 
-  let parsedWidgetVisibility = widgetVisibility;
-
-  try {
-    parsedWidgetVisibility = resolveReferences(parsedWidgetVisibility, currentState, []);
-  } catch (err) {
-    console.log(err);
-  }
-
   function onSelect(selection) {
-    onComponentOptionChanged(component, 'value', selection);
-    onEvent('onSelectionChange', { component });
+    setValue(selection);
+    setExposedVariable('value', selection);
+    fireEvent('onSelectionChange');
   }
 
   useEffect(() => {
-    onComponentOptionChanged(component, 'value', parsedDefaultValue);
+    const exposedVariables = {
+      value: value,
+      selectOption: async function (option) {
+        onSelect(option);
+      },
+    };
+    setExposedVariables(exposedVariables);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedDefaultValue]);
+  }, [value, setValue]);
 
   return (
     <div
-      data-disabled={parsedDisabledState}
+      data-disabled={disabledState}
       className="row py-1"
-      style={{ height, display: parsedWidgetVisibility ? '' : 'none' }}
-      onClick={(event) => {
-        event.stopPropagation();
-        onComponentClick(id, component, event);
-      }}
+      style={{ height, display: visibility ? '' : 'none', boxShadow }}
+      data-cy={dataCy}
     >
       <span className="form-check-label col-auto py-0" style={{ color: textColor }}>
         {label}
@@ -96,12 +61,15 @@ export const RadioButton = function RadioButton({
         {selectOptions.map((option, index) => (
           <label key={index} className="form-check form-check-inline">
             <input
-              style={{ marginTop: '1px' }}
+              style={{
+                marginTop: '1px',
+                backgroundColor: checkedValue === option.value ? `${activeColor}` : 'white',
+              }}
               className="form-check-input"
-              checked={value === option.value}
+              checked={checkedValue === option.value}
               type="radio"
               value={option.value}
-              name={`${id}-radio-options`}
+              name={`${id}-${uuidv4()}`}
               onChange={() => onSelect(option.value)}
             />
             <span className="form-check-label" style={{ color: textColor }}>
